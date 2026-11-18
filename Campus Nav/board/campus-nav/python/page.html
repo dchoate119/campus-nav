@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Campus Nav</title>
+<style>
+:root{--bg:#10151c;--card:#1a222d;--ink:#eef2f7;--dim:#8fa0b5;--acc:#4cc2ff;--ok:#43d17a;--warn:#ffb020;--bad:#ff5d5d;--line:#2b3746}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.35 system-ui,sans-serif;padding-bottom:84px}
+header{position:sticky;top:0;z-index:5;background:#0b0f14;border-bottom:1px solid var(--line);padding:8px 14px;display:flex;gap:14px;align-items:baseline;flex-wrap:wrap}
+header b{font-size:18px}.stat{color:var(--dim);font-size:13px}.stat span{color:var(--ink);font-weight:600}
+main{padding:14px;max-width:640px;margin:auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px}
+h2{margin:0 0 10px;font-size:15px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em}
+button,select,input{font:inherit;color:var(--ink);background:#243142;border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+button{cursor:pointer;min-height:48px}button:active{filter:brightness(1.3)}
+button.pri{background:var(--acc);color:#04202f;font-weight:700;border:0}
+button.ok{background:var(--ok);color:#04230f;font-weight:700;border:0}
+button.bad{background:var(--bad);color:#2b0505;font-weight:700;border:0}
+button.sel{outline:2px solid var(--acc)}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}.row>*{flex:1 1 120px}
+.grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:#0b0f14;border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;border:0;border-radius:0;background:none;color:var(--dim);min-height:60px}nav button.on{color:var(--acc);font-weight:700}
+.cue{text-align:center;padding:26px 8px;border-radius:16px;background:#0b0f14;border:2px solid var(--line)}
+.cue .arrow{font-size:96px;line-height:1}.cue .txt{font-size:30px;font-weight:800;margin-top:4px}.cue .sub{color:var(--dim);font-size:14px;margin-top:6px}
+.big{font-size:54px;font-weight:800;text-align:center}.dim{color:var(--dim);font-size:13px}
+table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:6px 4px;border-bottom:1px solid var(--line);text-align:left}
+.tag{display:inline-block;padding:2px 8px;border-radius:99px;background:#243142;font-size:12px}
+canvas{width:100%;height:190px;background:#0b0f14;border-radius:10px;touch-action:none}
+.hidden{display:none}.err{color:var(--bad)}
+input[type=number]{width:84px}input[type=text]{width:100%}
+</style></head><body>
+<header><b>🧭 Campus Nav</b>
+<div class="stat">steps <span id="h_steps">0</span></div>
+<div class="stat">heading <span id="h_head">0</span>°</div>
+<div class="stat">walks <span id="h_walks">0</span>/<span id="h_max">10</span></div>
+<div class="stat">now <span id="h_act">–</span></div>
+<div class="stat">IMU <span id="h_imu">–</span></div></header>
+<main>
+
+<section id="v_walk">
+  <div class="card" id="setup">
+    <h2>New walk</h2>
+    <div class="row"><select id="who"><option>Jude</option><option>Dan</option></select>
+      <input type="text" id="wname" placeholder="route name (e.g. Halligan 210 → Nolop)"></div>
+    <div class="row" id="kinds">
+      <button data-k="demo" class="sel">① Demo<br><small>you guide it</small></button>
+      <button data-k="dagger">② DAgger<br><small>it guides, you correct</small></button>
+      <button data-k="test">③ Test<br><small>not saved</small></button>
+      <button data-k="stairs">④ Stairs practice<br><small>teaches stairs detector</small></button>
+    </div>
+    <div class="dim" id="kindhelp"></div>
+    <div class="row"><button class="pri" id="go">Start walk</button></div>
+    <div class="dim">Stand still for a moment first, then start. Heading and steps reset to 0 at the start. <span id="setuperr" class="err"></span></div>
+  </div>
+
+  <div class="card hidden" id="live">
+    <h2 id="livetitle">Walking</h2>
+    <div id="cuebox" class="cue hidden"><div class="arrow" id="arrow">⬆</div><div class="txt" id="cuetxt">Straight</div><div class="sub" id="cuesub"></div></div>
+    <div id="recbox" class="hidden"><div class="big" id="bigsteps">0</div><div class="dim" style="text-align:center">steps · turns are detected automatically</div></div>
+    <h2 style="margin-top:14px">Mark</h2>
+    <div class="grid">
+      <button data-m="stairs_down">Stairs ↓<br><small>start</small></button>
+      <button data-m="stairs_up">Stairs ↑<br><small>start</small></button>
+      <button data-m="stairs_end">Stairs<br><small>end</small></button>
+    </div>
+    <div class="row"><button class="ok" data-m="arrive">📍 Arrived</button></div>
+    <div id="dag" class="hidden">
+      <h2 style="margin-top:14px">Wrong cue? Tap what it should say</h2>
+      <div class="grid">
+        <button data-c="straight">⬆ Straight</button><button data-c="left">⬅ Left</button><button data-c="right">➡ Right</button>
+        <button data-c="stairs_down">Stairs ↓</button><button data-c="stairs_up">Stairs ↑</button><button data-c="arrive">📍 Arrive</button>
+      </div>
+      <div class="dim" id="corrcount"></div>
+    </div>
+    <div class="row"><button class="bad" id="stop">Stop &amp; save</button></div>
+  </div>
+</section>
+
+<section id="v_review" class="hidden">
+  <div class="card"><h2>Walks</h2><div id="walklist" class="dim">loading…</div></div>
+  <div class="card hidden" id="editor">
+    <h2 id="edtitle">Walk</h2>
+    <canvas id="plot" width="640" height="380"></canvas>
+    <div class="dim">Heading (°) per step. Colored bands = what the cloning labels will be. Detected turns are labelled automatically; fix stairs and arrival below.</div>
+    <h2 style="margin-top:12px">Markers</h2>
+    <div id="markers"></div>
+    <div class="row"><button id="addm">+ add marker</button><button class="pri" id="savem">Save</button></div>
+    <div id="turnlist" class="dim"></div>
+  </div>
+</section>
+
+<section id="v_train" class="hidden">
+  <div class="card">
+    <h2>Behavior cloning</h2>
+    <div class="dim">Learns from every included walk. Quick (k-nearest-neighbours), so you can retrain on the spot after a DAgger walk.</div>
+    <div class="row"><button class="pri" id="train">Train policy</button></div>
+    <div id="trainout" class="dim"></div>
+  </div>
+  <div class="card"><h2>Cues</h2>
+    <label><input type="checkbox" id="vib" checked> vibrate on new cue</label><br>
+    <label><input type="checkbox" id="say"> speak the cue</label></div>
+  <div class="card"><h2>Utility</h2><div class="row"><button id="zero">Zero heading &amp; steps</button></div></div>
+</section>
+</main>
+<nav><button data-v="walk" class="on">Walk</button><button data-v="review">Review</button><button data-v="train">Train</button></nav>
+
+<script>
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const ARROW={straight:"⬆",left:"⬅",right:"➡",stairs_down:"⤵",stairs_up:"⤴",arrive:"📍"};
+const TEXT={straight:"Keep going straight",left:"Turn LEFT",right:"Turn RIGHT",stairs_down:"Stairs DOWN",stairs_up:"Stairs UP",arrive:"You've arrived"};
+let kind="demo", last=null, lastCue=null, edit=null;
+const HELP={demo:"Walk the route yourself. Tap Stairs/Arrived as they happen (you can fix timing later in Review). Turns are found automatically.",
+ dagger:"The learned policy gives cues while you walk the CORRECT route. Tap the right answer whenever a cue is wrong. Corrected walks are added to the training data.",
+ test:"Pure navigation test: follow the cues. Nothing is saved or counted.",
+ stairs:"A short stairwell practice (a few flights up and down, with flat walking before and after). Tap Stairs start/end exactly as you begin and finish each flight. Trains the stairs detector only; does not count toward the 10 walks."};
+async function api(p,b){const r=await fetch(p,b===undefined?{}:{method:"POST",body:JSON.stringify(b)});const j=await r.json();if(!r.ok||j.error)throw new Error(j.error||r.status);return j}
+function show(v){["walk","review","train"].forEach(x=>$("#v_"+x).classList.toggle("hidden",x!==v));$$("nav button").forEach(b=>b.classList.toggle("on",b.dataset.v===v));if(v==="review")loadWalks()}
+$$("nav button").forEach(b=>b.onclick=()=>show(b.dataset.v));
+$$("#kinds button").forEach(b=>b.onclick=()=>{kind=b.dataset.k;$$("#kinds button").forEach(x=>x.classList.toggle("sel",x===b));$("#kindhelp").textContent=HELP[kind]});
+$("#kindhelp").textContent=HELP.demo;
+$("#go").onclick=async()=>{$("#setuperr").textContent="";
+ try{await api("/api/walk/start",{who:$("#who").value,name:$("#wname").value,kind,navigate:kind==="dagger"||kind==="test"})}catch(e){$("#setuperr").textContent=e.message}};
+$("#stop").onclick=async()=>{await api("/api/walk/stop",{})};
+$$("[data-m]").forEach(b=>b.onclick=()=>{api("/api/walk/mark",{kind:b.dataset.m});flash(b)});
+$$("[data-c]").forEach(b=>b.onclick=()=>{api("/api/walk/correct",{action:b.dataset.c});flash(b)});
+$("#zero").onclick=()=>api("/api/zero",{});
+function flash(b){b.classList.add("sel");setTimeout(()=>b.classList.remove("sel"),400)}
+
+function cue(c){
+  const a=c.shown;$("#arrow").textContent=ARROW[a];$("#cuetxt").textContent=TEXT[a];
+  $("#cuesub").textContent=`policy confidence ${Math.round(c.conf*100)}%`;
+  $("#cuebox").style.borderColor=a==="straight"?"var(--line)":a==="arrive"?"var(--ok)":"var(--warn)";
+  if(a!==lastCue){lastCue=a;
+    if(a!=="straight"&&$("#vib").checked&&navigator.vibrate)navigator.vibrate(a==="arrive"?[300,100,300]:[120]);
+    if($("#say").checked&&window.speechSynthesis)speechSynthesis.speak(new SpeechSynthesisUtterance(TEXT[a]));}
+}
+async function poll(){
+  try{const s=await api("/api/state");last=s;
+    $("#h_steps").textContent=s.steps;$("#h_head").textContent=Math.round(s.heading);
+    $("#h_walks").textContent=s.walk_count;$("#h_max").textContent=s.max_walks;
+    $("#h_act").textContent=s.activity;$("#h_walks").style.color=s.walk_count>=s.max_walks?"var(--bad)":"";
+    $("#h_imu").textContent=s.imu.rate_hz?s.imu.rate_hz+" Hz":"✗ "+s.imu.text;
+    const live=s.mode!=="idle";$("#setup").classList.toggle("hidden",live);$("#live").classList.toggle("hidden",!live);
+    if(live){const nav=s.mode==="navigate",w=s.walk;
+      $("#livetitle").textContent=`${w.id} · ${w.who} · ${w.kind}${w.name?" · "+w.name:""}`;
+      $("#cuebox").classList.toggle("hidden",!nav);$("#recbox").classList.toggle("hidden",nav);
+      $("#dag").classList.toggle("hidden",w.kind!=="dagger");
+      $("#bigsteps").textContent=s.steps;
+      $("#corrcount").textContent=`${w.corrections} corrections · ${w.markers} markers`;
+      if(nav)cue(s.cue);else lastCue=null;
+      $("#cuesub").textContent+=` · ${s.steps} steps · turn #${s.turns} · ${s.activity}`}
+      $("#recbox .dim").textContent=`steps · now: ${s.activity} · turns are detected automatically`
+    else lastCue=null;
+  }catch(e){$("#h_imu").textContent="offline"}
+  setTimeout(poll,400)}
+poll();
+
+async function loadWalks(){
+  const ws=await api("/api/walks");
+  $("#walklist").innerHTML=ws.length?`<table><tr><th>id</th><th>who</th><th>type</th><th>steps</th><th>use</th><th></th></tr>`+
+   ws.map(w=>`<tr><td><a href="#" data-open="${w.id}" style="color:var(--acc)">${w.id}</a></td><td>${w.who}</td><td>${w.kind}${w.corrections?" ("+w.corrections+" fixes)":""}</td><td>${w.steps}</td>
+   <td><input type="checkbox" data-inc="${w.id}" ${w.include?"checked":""}></td><td><button data-del="${w.id}" style="min-height:36px;padding:4px 10px">✕</button></td></tr>`).join("")+"</table>":"No walks yet. Record a demo first.";
+  $$("[data-open]").forEach(a=>a.onclick=e=>{e.preventDefault();openWalk(a.dataset.open)});
+  $$("[data-inc]").forEach(c=>c.onchange=()=>api(`/api/walk/${c.dataset.inc}/edit`,{include:c.checked}));
+  $$("[data-del]").forEach(b=>b.onclick=async()=>{if(confirm("Delete "+b.dataset.del+"?")){await api(`/api/walk/${b.dataset.del}/delete`,{});loadWalks();$("#editor").classList.add("hidden")}});
+}
+const COL={straight:"#1e2a38",left:"#2a6f97",right:"#a0522d",stairs_down:"#6b4fa3",stairs_up:"#4f7fa3",arrive:"#2e8b57"};
+async function openWalk(id){
+  edit=await api("/api/walk/"+id);$("#editor").classList.remove("hidden");
+  $("#edtitle").textContent=`${id} · ${edit.walk.who} · ${edit.walk.steps.length} steps`;
+  renderEditor();$("#editor").scrollIntoView({behavior:"smooth"})}
+function renderEditor(){
+  const w=edit.walk,ys=w.steps.map(s=>s.yaw),n=ys.length,c=$("#plot"),g=c.getContext("2d");
+  g.clearRect(0,0,c.width,c.height);if(!n)return;
+  const lo=Math.min(...ys,-10),hi=Math.max(...ys,10),X=i=>20+(c.width-30)*i/Math.max(1,n-1),Y=v=>c.height-20-(c.height-40)*(v-lo)/(hi-lo||1);
+  edit.labels.forEach((l,i)=>{g.fillStyle=COL[l];g.fillRect(X(i)-1,0,(c.width-30)/n+2,c.height)});
+  g.strokeStyle="#ffffff44";g.beginPath();g.moveTo(20,Y(0));g.lineTo(c.width,Y(0));g.stroke();
+  g.strokeStyle="#fff";g.lineWidth=3;g.beginPath();ys.forEach((v,i)=>i?g.lineTo(X(i),Y(v)):g.moveTo(X(i),Y(v)));g.stroke();
+  g.fillStyle="#fff";g.font="18px sans-serif";g.fillText(Math.round(hi)+"°",0,16);g.fillText(Math.round(lo)+"°",0,c.height-4);
+  w.markers.forEach(m=>{g.fillStyle="#ffb020";g.fillRect(X(m.step)-2,0,4,c.height)});
+  $("#markers").innerHTML=w.markers.map((m,i)=>`<div class="row" style="margin:4px 0"><select data-mk="${i}">${["stairs_down","stairs_up","stairs_end","arrive"].map(k=>`<option ${k===m.kind?"selected":""}>${k}</option>`).join("")}</select>
+   <input type="number" data-ms="${i}" value="${m.step}" min="0" max="${n}"><button data-md="${i}" style="flex:0 0 52px">✕</button></div>`).join("")||"<div class=dim>none</div>";
+  $$("[data-mk]").forEach(e=>e.onchange=()=>{w.markers[e.dataset.mk].kind=e.value;relabel()});
+  $$("[data-ms]").forEach(e=>e.onchange=()=>{w.markers[e.dataset.ms].step=+e.value;relabel()});
+  $$("[data-md]").forEach(e=>e.onclick=()=>{w.markers.splice(+e.dataset.md,1);relabel()});
+  $("#turnlist").textContent="Detected turns: "+(edit.turns.map(t=>`${t.deg>0?"left":"right"} ${Math.abs(t.deg)}° at step ${t.step}`).join(", ")||"none")+
+    (w.corrections&&w.corrections.length?` · ${w.corrections.length} DAgger corrections kept`:"");
+}
+async function relabel(){ // save markers then re-fetch labels
+  await api(`/api/walk/${edit.walk.id}/edit`,{markers:edit.walk.markers});edit=await api("/api/walk/"+edit.walk.id);renderEditor()}
+$("#addm").onclick=()=>{edit.walk.markers.push({step:Math.max(0,edit.walk.steps.length-1),kind:"arrive"});relabel()};
+$("#savem").onclick=async()=>{await relabel();alert("Saved. Press Train to use it.")};
+
+$("#train").onclick=async()=>{$("#trainout").textContent="training…";
+  try{const r=(await api("/api/train",{})).policy;
+   $("#trainout").innerHTML=`<p>Trained on <b>${r.walks.join(", ")}</b> (${r.rows} labelled steps).</p>`+
+   (r.stairs_loo&&r.stairs_loo.length?`<p><b>Stairs detector</b> (${r.stairs_counts.flat} flat / ${r.stairs_counts.up} up / ${r.stairs_counts.down} down steps) held-out:</p><table><tr><th>walk</th><th>all steps</th><th>stairs steps found</th></tr>`+
+   r.stairs_loo.map(x=>`<tr><td>${x.id}</td><td>${Math.round(x.acc*100)}%</td><td>${x.stairs_recall===null?"–":Math.round(x.stairs_recall*100)+"%"}</td></tr>`).join("")+"</table>":"<p>Stairs detector needs 2+ walks with stairs markers for a held-out check.</p>")+
+   (r.loo.length?`<table><tr><th>held-out</th><th>step acc.</th><th>turns found</th><th>false turn cues</th></tr>`+
+   r.loo.map(x=>`<tr><td>${x.id}</td><td>${Math.round(x.acc*100)}%</td><td>${x.turn_hit}/${x.turn_total}</td><td>${x.false_turn_cues}</td></tr>`).join("")+"</table>":"<p>Need 2+ walks for a held-out check.</p>")
+  }catch(e){$("#trainout").innerHTML=`<span class=err>${e.message}</span>`}};
+</script></body></html>

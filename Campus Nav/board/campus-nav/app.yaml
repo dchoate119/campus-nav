@@ -1,0 +1,5 @@
+name: Campus Nav
+description: "GPS-free campus guide: ankle IMU step counter + heading + behavior-cloned policy, phone web page on port 8000"
+icon: 🧭
+ports: [8000]
+bricks: []

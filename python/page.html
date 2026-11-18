@@ -39,6 +39,9 @@ input[type=number]{width:84px}input[type=text]{width:100%}
 <main>
 
 <section id="v_walk">
+  <div class="card"><h2>Live IMU</h2>
+    <div id="imuline" class="dim">no data yet</div>
+    <div class="dim" id="imumsg"></div></div>
   <div class="card" id="setup">
     <h2>New walk</h2>
     <div class="row"><select id="who"><option>Jude</option><option>Dan</option></select>
@@ -120,7 +123,7 @@ $$("nav button").forEach(b=>b.onclick=()=>show(b.dataset.v));
 $$("#kinds button").forEach(b=>b.onclick=()=>{kind=b.dataset.k;$$("#kinds button").forEach(x=>x.classList.toggle("sel",x===b));$("#kindhelp").textContent=HELP[kind]});
 $("#kindhelp").textContent=HELP.demo;
 $("#go").onclick=async()=>{$("#setuperr").textContent="";
- try{await api("/api/walk/start",{who:$("#who").value,name:$("#wname").value,kind,navigate:kind==="dagger"||kind==="test"})}catch(e){$("#setuperr").textContent=e.message}};
+ try{await api("/api/walk/start",{who:$("#who").value,name:$("#wname").value,kind,navigate:kind==="dagger"||kind==="test"})}catch(e){$("#setuperr").textContent=e.message;alert("Couldn't start: "+e.message)}};
 $("#stop").onclick=async()=>{await api("/api/walk/stop",{})};
 $$("[data-m]").forEach(b=>b.onclick=()=>{api("/api/walk/mark",{kind:b.dataset.m});flash(b)});
 $$("[data-c]").forEach(b=>b.onclick=()=>{api("/api/walk/correct",{action:b.dataset.c});flash(b)});
@@ -139,7 +142,9 @@ async function poll(){
   try{const s=await api("/api/state");last=s;
     $("#h_steps").textContent=s.steps;$("#h_head").textContent=Math.round(s.heading);
     $("#h_walks").textContent=s.walk_count;$("#h_max").textContent=s.max_walks;
-    $("#h_act").textContent=s.activity;$("#h_walks").style.color=s.walk_count>=s.max_walks?"var(--bad)":"";
+    $("#h_act").textContent=s.activity;
+    const L=s.imu.latest;$("#imuline").innerHTML=L?`accel g: <b>${L.slice(0,3).join(", ")}</b><br>gyro °/s: <b>${L.slice(3).join(", ")}</b><br>${s.imu.rate_hz} samples/s`:"<b class=err>no IMU samples</b>";
+    $("#imumsg").textContent=s.imu.text;$("#h_walks").style.color=s.walk_count>=s.max_walks?"var(--bad)":"";
     $("#h_imu").textContent=s.imu.rate_hz?s.imu.rate_hz+" Hz":"✗ "+s.imu.text;
     const live=s.mode!=="idle";$("#setup").classList.toggle("hidden",live);$("#live").classList.toggle("hidden",!live);
     if(live){const nav=s.mode==="navigate",w=s.walk;
@@ -149,8 +154,8 @@ async function poll(){
       $("#bigsteps").textContent=s.steps;
       $("#corrcount").textContent=`${w.corrections} corrections · ${w.markers} markers`;
       if(nav)cue(s.cue);else lastCue=null;
-      $("#cuesub").textContent+=` · ${s.steps} steps · turn #${s.turns} · ${s.activity}`}
-      $("#recbox .dim").textContent=`steps · now: ${s.activity} · turns are detected automatically`
+      $("#cuesub").textContent+=` · ${s.steps} steps · turn #${s.turns} · ${s.activity}`;
+      $("#recbox .dim").textContent=`steps · now: ${s.activity} · turns are detected automatically`}
     else lastCue=null;
   }catch(e){$("#h_imu").textContent="offline"}
   setTimeout(poll,400)}

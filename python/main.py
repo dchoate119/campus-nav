@@ -26,6 +26,7 @@ GYRO_COUNTS_PER_DPS = 32.8    # sketch uses GYRO_1000DPS
 
 engine = Engine(LiveStepper(StepNetNP(HERE / "stepnet.npz")), HERE.parent / "data")   # app-level data/, never deployed
 imu_info = {"text": "starting", "rate_hz": 0}
+latest = {"s": None}              # newest IMU sample, for the page's live readout
 
 
 def parse(reply):
@@ -57,6 +58,8 @@ def sampler_loop():
             print(f"read error: {e!r}")
             time.sleep(1)
             continue
+        if samples:
+            latest["s"] = [round(v, 2) for v in samples[-1]]
         try:
             engine.add_samples(samples)
         except Exception as e:
@@ -64,6 +67,11 @@ def sampler_loop():
         count += len(samples)
         now = time.monotonic()
         if now >= report:
+            if count == 0:                # no samples: ask the sketch why (it keeps retrying the IMU)
+                try:
+                    imu_info["text"] = Bridge.call("imu_status")
+                except Exception as e:
+                    imu_info["text"] = f"sketch not answering ({e!r})"
             imu_info["rate_hz"] = count
             count, report = 0, now + 1
         time.sleep(POLL_S)
@@ -93,7 +101,7 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/":
                 self._send(lan_page(), "text/html; charset=utf-8")
             elif path == "/api/state":
-                self._send({**engine.state(), "imu": imu_info})
+                self._send({**engine.state(), "imu": {**imu_info, "latest": latest["s"]}})
             elif path == "/api/walks":
                 self._send([{k: w.get(k) for k in ("id", "name", "who", "kind", "created", "include", "seconds")}
                             | {"steps": len(w["steps"]), "markers": len(w["markers"]),

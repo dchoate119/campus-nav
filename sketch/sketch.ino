@@ -25,6 +25,21 @@ String read_samples();
 String imu_debug();
 void draw(String frame);
 
+// Look for the IMU and start it. Called at boot and again from loop() every 2 s until it works,
+// so powering the board from a battery (where the sensor may not be ready at the instant the
+// board starts) no longer leaves it stuck on "no MPU-6050" until the next reboot.
+void try_imu() {
+  bool ok = imu.begin(RATE_HZ, MPU6050::ACCEL_8G, MPU6050::GYRO_1000DPS);
+  if (ok) {
+    imu.calibrateGyro(200);  // 2 s: keep the sensor still
+    imu.fifoBegin();
+    imu_info = "ok whoami=0x" + String(imu.whoAmI(), HEX) + " rate=" + String(RATE_HZ);
+  } else {
+    imu_info = "no MPU-6050 at 0x68: check wiring";
+  }
+  imu_ok = ok;
+}
+
 void setup() {
   matrix.begin();
   matrix.setGrayscaleBits(3);  // brightness 0..7
@@ -39,15 +54,7 @@ void setup() {
   Bridge.provide("draw", draw);
   Monitor.begin();
 
-  bool ok = imu.begin(RATE_HZ, MPU6050::ACCEL_8G, MPU6050::GYRO_1000DPS);
-  if (ok) {
-    imu.calibrateGyro(200);  // 2 s: keep the sensor still at power-on
-    imu.fifoBegin();
-    imu_info = "ok whoami=0x" + String(imu.whoAmI(), HEX) + " rate=" + String(RATE_HZ);
-  } else {
-    imu_info = "no MPU-6050 at 0x68: check wiring";
-  }
-  imu_ok = ok;
+  try_imu();
   Monitor.println("gait wearable sketch: " + imu_info);
 }
 
@@ -74,6 +81,11 @@ void loop() {
   last += 1000;
   if (!imu_ok) {
     Monitor.println(imu_info);
+    static unsigned long last_try = 0;
+    if (millis() - last_try > 2000) {   // keep trying: sensor may be wired late or slow to power up
+      last_try = millis();
+      try_imu();
+    }
     return;
   }
   long mg[3], ddps[3];  // milli-g and tenths of deg/s

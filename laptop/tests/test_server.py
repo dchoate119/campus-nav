@@ -8,7 +8,7 @@ from pathlib import Path
 import pandas as pd
 
 HERE = Path(__file__).resolve().parents[1]
-PY = HERE / "board" / "campus-nav" / "python"
+PY = HERE.parent / "python"
 sys.path.insert(0, str(PY))
 
 stub = types.ModuleType("arduino.app_utils")

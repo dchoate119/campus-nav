@@ -1,140 +1,130 @@
-// step-counter: MPU-6050 on the ankle (header SDA/SCL, address 0x68).
+#include <Arduino_LED_Matrix.h>
+#include <Arduino_RouterBridge.h>
+#include "MPU6050.h"
+
+// MPU-6050 IMU for the gait wearable. Python pulls samples with read_samples().
 //
-// loop() samples at 50 Hz into a ring buffer. Python calls read_batch() to
-// collect everything since its last call, one "t_ms,ax,ay,az,gx,gy,gz" line
-// per sample, in g and deg/s (ranges: ±16 g, ±2000 deg/s, wide enough for running).
-// imu_check() and imu_read() remain for the hardware test.
+// WIRING:
+//   MPU-6050 VCC -> 3.3V     GND -> GND
+//   MPU-6050 SDA -> SDA      SCL -> SCL   (the pins next to AREF on the UNO header)
+//   AD0 unconnected (address 0x68). Most breakout boards already have pull-ups.
+//   Using the Qwiic connector instead? Change Wire to Wire1 below.
+const uint16_t RATE_HZ = 100;
+const int MAX_PER_CALL = 40;  // samples per read_samples() call (0.4 s at 100 Hz)
 
-#include <Wire.h>
-#include "Arduino_RouterBridge.h"
+MPU6050 imu(Wire);
+volatile bool imu_ok = false;  // only true once setup is done: Bridge calls check it before using I2C
+String imu_info = "starting the IMU (stuck here = I2C problem: check the 4 wires)";
 
-const uint8_t ADDR = 0x68;
-const uint8_t REG_GYRO_CONFIG = 0x1B;
-const uint8_t REG_ACCEL_CONFIG = 0x1C;
-const uint8_t REG_ACCEL_XOUT_H = 0x3B;
-const uint8_t REG_PWR_MGMT_1 = 0x6B;
-const uint8_t REG_WHO_AM_I = 0x75;
+// 8 x 13 LED matrix. The animations live in python/matrix_art.py; Python sends frames here.
+const int MATRIX_PIXELS = 8 * 13;
+Arduino_LED_Matrix matrix;
 
-const uint8_t RANGE_MAX = 0x18;     // ±16 g / ±2000 deg/s in the config registers
-const float ACCEL_LSB = 2048.0;     // counts per g at ±16 g
-const float GYRO_LSB = 16.4;        // counts per deg/s at ±2000 deg/s
-
-const unsigned long SAMPLE_MS = 20; // 50 Hz
-const int BUF_SIZE = 256;           // ~5 s of slack if Python falls behind
-const int MAX_BATCH = 50;           // samples per read_batch() reply
-
-struct Sample {
-    uint32_t t_ms;
-    int16_t v[6];                   // raw counts: ax, ay, az, gx, gy, gz
-};
-
-// Ring buffer: head is the next slot to write, count is how many are unread.
-// The oldest unread sample is count slots behind head.
-Sample buf[BUF_SIZE];
-int head = 0;
-int count = 0;
-uint32_t dropped = 0;               // samples overwritten before Python read them
-
-bool found = false;
-unsigned long next_sample_ms = 0;
-
-void write_reg(uint8_t reg, uint8_t val) {
-    Wire.beginTransmission(ADDR);
-    Wire.write(reg);
-    Wire.write(val);
-    Wire.endTransmission();
-}
-
-// Point at reg, then request n bytes
-void request(uint8_t reg, uint8_t n) {
-    Wire.beginTransmission(ADDR);
-    Wire.write(reg);
-    Wire.endTransmission(false);
-    Wire.requestFrom(ADDR, n);
-}
-
-// Raw counts: ax, ay, az, temp, gx, gy, gz
-void read_raw(int16_t v[7]) {
-    request(REG_ACCEL_XOUT_H, 14);
-    for (int i = 0; i < 7; i++) {
-        uint8_t hi = Wire.read();
-        uint8_t lo = Wire.read();
-        v[i] = (int16_t)((hi << 8) | lo);
-    }
-}
-
-String imu_check() {
-    if (!found) return "not found at 0x68";
-    request(REG_WHO_AM_I, 1);
-    return "found, whoami=0x" + String(Wire.read(), HEX);
-}
-
-String imu_read() {
-    if (!found) return "";
-    int16_t v[7];
-    read_raw(v);
-    String s;
-    for (int i = 0; i < 3; i++) s += String(v[i] / ACCEL_LSB, 3) + ",";
-    for (int i = 4; i < 7; i++) s += String(v[i] / GYRO_LSB, 1) + (i < 6 ? "," : "");
-    return s;
-}
-
-// Write a sample at head. If the buffer is full, this overwrites the oldest one.
-void push(const Sample &s) {
-    buf[head] = s;
-    head = (head + 1) % BUF_SIZE;
-    if (count < BUF_SIZE) count++;
-    else dropped++;
-}
-
-// Hand Python the oldest unread samples (up to MAX_BATCH) and mark them read.
-String read_batch() {
-    int n = min(count, MAX_BATCH);
-    int tail = (head - count + BUF_SIZE) % BUF_SIZE;
-    String s;
-    for (int k = 0; k < n; k++) {
-        const Sample &p = buf[(tail + k) % BUF_SIZE];
-        s += String(p.t_ms);
-        for (int i = 0; i < 3; i++) s += "," + String(p.v[i] / ACCEL_LSB, 3);
-        for (int i = 3; i < 6; i++) s += "," + String(p.v[i] / GYRO_LSB, 1);
-        s += "\n";
-    }
-    count -= n;
-    return s;
-}
-
-uint32_t imu_dropped() {
-    return dropped;
-}
+String imu_status();
+String read_samples();
+String imu_debug();
+void draw(String frame);
 
 void setup() {
-    Wire.begin();
-    Wire.beginTransmission(ADDR);
-    found = Wire.endTransmission() == 0;
-    if (found) {
-        write_reg(REG_PWR_MGMT_1, 0);  // wake from sleep
-        write_reg(REG_GYRO_CONFIG, RANGE_MAX);
-        write_reg(REG_ACCEL_CONFIG, RANGE_MAX);
-    }
+  matrix.begin();
+  matrix.setGrayscaleBits(3);  // brightness 0..7
+  matrix.clear();
 
-    Bridge.begin();
-    Bridge.provide_safe("imu_check", imu_check);
-    Bridge.provide_safe("imu_read", imu_read);
-    // provide_safe runs these in the loop thread, so they never race push()
-    Bridge.provide_safe("read_batch", read_batch);
-    Bridge.provide_safe("imu_dropped", imu_dropped);
-    next_sample_ms = millis();
+  // Bridge first, so Python can always ask what's going on, even if the IMU hangs below.
+  // The I2C functions check imu_ok, which only becomes true once the IMU is set up.
+  Bridge.begin();
+  Bridge.provide("imu_status", imu_status);
+  Bridge.provide("read_samples", read_samples);
+  Bridge.provide("imu_debug", imu_debug);
+  Bridge.provide("draw", draw);
+  Monitor.begin();
+
+  bool ok = imu.begin(RATE_HZ, MPU6050::ACCEL_8G, MPU6050::GYRO_1000DPS);
+  if (ok) {
+    imu.calibrateGyro(200);  // 2 s: keep the sensor still at power-on
+    imu.fifoBegin();
+    imu_info = "ok whoami=0x" + String(imu.whoAmI(), HEX) + " rate=" + String(RATE_HZ);
+  } else {
+    imu_info = "no MPU-6050 at 0x68: check wiring";
+  }
+  imu_ok = ok;
+  Monitor.println("gait wearable sketch: " + imu_info);
+}
+
+// Latest sample and sample count, saved by read_samples() for loop() to print.
+// loop() never touches I2C itself, so it can't get in the way of the Bridge calls.
+volatile int16_t latest[6];
+volatile unsigned long samples_since_print = 0;
+
+// Whole number scaled by 10^decimals -> text, e.g. (-1234, 3) -> "-1.234".
+// (Avoids printing floats, which this core does unreliably.)
+String fixed(long v, int decimals) {
+  String sign = v < 0 ? "-" : " ";
+  v = labs(v);
+  long div = 1;
+  for (int i = 0; i < decimals; i++) div *= 10;
+  String frac = String(v % div);
+  while ((int)frac.length() < decimals) frac = "0" + frac;
+  return sign + String(v / div) + "." + frac;
 }
 
 void loop() {
-    if (!found || millis() < next_sample_ms) return;
-    next_sample_ms += SAMPLE_MS;    // fixed schedule, so timing doesn't drift
+  static unsigned long last = millis();
+  if (millis() - last < 1000) return;
+  last += 1000;
+  if (!imu_ok) {
+    Monitor.println(imu_info);
+    return;
+  }
+  long mg[3], ddps[3];  // milli-g and tenths of deg/s
+  for (int i = 0; i < 3; i++) {
+    mg[i] = (long)latest[i] * 1000 / 4096;  // 4096 counts per g at 8 g
+    ddps[i] = (long)latest[i + 3] * 100 / 328;  // 32.8 counts per deg/s at 1000 dps
+  }
+  Monitor.println(String((unsigned long)samples_since_print) + " Hz  accel g [" + fixed(mg[0], 3) + " " +
+                  fixed(mg[1], 3) + " " + fixed(mg[2], 3) + "]  gyro dps [" + fixed(ddps[0], 1) +
+                  " " + fixed(ddps[1], 1) + " " + fixed(ddps[2], 1) + "]");
+  samples_since_print = 0;
+}
 
-    int16_t raw[7];
-    read_raw(raw);
-    Sample s;
-    s.t_ms = millis();
-    for (int i = 0; i < 3; i++) s.v[i] = raw[i];
-    for (int i = 0; i < 3; i++) s.v[3 + i] = raw[4 + i];  // skip temperature
-    push(s);
+String imu_status() { return imu_info; }
+
+String imu_debug() { return imu_ok ? imu.dump() : imu_info; }
+
+// One frame: 104 digits '0'..'7' (brightness), row by row, 13 per row.
+void draw(String frame) {
+  uint8_t pixels[MATRIX_PIXELS] = {0};
+  for (int i = 0; i < MATRIX_PIXELS && i < (int)frame.length(); i++) {
+    char c = frame[i];
+    pixels[i] = (c >= '0' && c <= '7') ? c - '0' : 0;
+  }
+  matrix.draw(pixels);
+}
+
+// Everything in the FIFO since the last call, oldest first:
+//   "<overflow 0|1>|ax,ay,az,gx,gy,gz;ax,ay,..."
+// Raw counts (whole numbers; this core's float-to-text is unreliable), gyro bias removed.
+// Python divides by ACCEL_COUNTS_PER_G (4096 at 8 g) and GYRO_COUNTS_PER_DPS (32.8 at 1000 dps).
+// overflow=1 means samples were lost because the calls came too slowly.
+String read_samples() {
+  if (!imu_ok) return "E|";
+  bool overflow = imu.fifoOverflowed();
+  if (overflow) imu.fifoReset();
+
+  static MPU6050::Raw buf[MAX_PER_CALL];
+  int n = imu.readFifoRaw(buf, MAX_PER_CALL);
+  String out = overflow ? "1|" : "0|";
+  out.reserve(2 + n * 38);
+  for (int i = 0; i < n; i++) {
+    MPU6050::Raw r = imu.unbiased(buf[i]);
+    if (i) out += ';';
+    out += String(r.ax) + ',' + String(r.ay) + ',' + String(r.az) + ',' +
+           String(r.gx) + ',' + String(r.gy) + ',' + String(r.gz);
+    if (i == n - 1) {
+      latest[0] = r.ax; latest[1] = r.ay; latest[2] = r.az;
+      latest[3] = r.gx; latest[4] = r.gy; latest[5] = r.gz;
+    }
+  }
+  samples_since_print += n;
+  return out;
 }

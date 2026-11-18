@@ -1,6 +1,6 @@
 """The ankle step counter (from Gait Wearable/StepCounter.py) in plain NumPy, plus the live
 wrapper that turns the 100 Hz IMU stream into step events. No torch needed on the board.
-Weights come from stepnet.npz, written by Campus Nav/export_stepnet.py."""
+Weights come from stepnet.npz, written by laptop/export_stepnet.py."""
 from collections import deque
 from pathlib import Path
 

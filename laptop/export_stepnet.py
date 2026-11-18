@@ -3,7 +3,7 @@ NumPy arrays, so the UNO Q can run it with no torch (and no laptop, no wifi).
 
 BatchNorm is folded into the convolutions, so the board only does conv + ReLU + add.
 Run from anywhere:  python export_stepnet.py
-Writes board/campus-nav/python/stepnet.npz and a parity check against torch.
+Writes ../python/stepnet.npz and a parity check against torch.
 """
 import sys
 from pathlib import Path
@@ -18,7 +18,7 @@ if not GAIT.exists():                       # standalone copy of this project: u
 sys.path.insert(0, str(GAIT))
 import StepCounter as sc  # noqa: E402
 
-OUT = HERE / "board" / "campus-nav" / "python" / "stepnet.npz"
+OUT = HERE.parent / "python" / "stepnet.npz"
 
 
 def fold(conv, bn):

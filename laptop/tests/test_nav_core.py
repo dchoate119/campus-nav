@@ -4,7 +4,7 @@ from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "board" / "campus-nav" / "python"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "python"))
 import nav_core as nc  # noqa: E402
 
 

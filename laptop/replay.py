@@ -1,7 +1,6 @@
 """Replay a recorded IMU CSV through the Campus Nav engine on the laptop (no board needed).
 
-  python replay.py ../"Gait Wearable"/data_ankle/walking_20261102-214308.csv
-  python replay.py FILE.csv --policy-walks data/walks      # also print the cue the policy gives
+  python replay.py ../data/walks/w01.csv
 
 Prints the step count, the heading and detected turns. Handy for checking the pipeline and for
 testing against walks pulled off the board (their .csv files are in the board's data/walks/).
@@ -15,14 +14,15 @@ import numpy as np
 import pandas as pd
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE / "board" / "campus-nav" / "python"))
+PY = HERE.parent / "python"
+sys.path.insert(0, str(PY))
 from engine import Engine  # noqa: E402
 from stepnet_np import LiveStepper, StepNetNP  # noqa: E402
 
 
 def replay(csv, data_dir=None, chunk=10):
     data_dir = data_dir or tempfile.mkdtemp()
-    eng = Engine(LiveStepper(StepNetNP(HERE / "board" / "campus-nav" / "python" / "stepnet.npz")), data_dir)
+    eng = Engine(LiveStepper(StepNetNP(PY / "stepnet.npz")), data_dir)
     w = pd.read_csv(csv, comment="#")[["ax", "ay", "az", "gx", "gy", "gz"]].to_numpy(float)
     eng.start_walk("replay", Path(csv).name, "test", navigate=False)
     for i in range(0, len(w), chunk):

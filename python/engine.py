@@ -1,6 +1,6 @@
 """Campus Nav engine: ties the step counter, heading, turn detector, walk recorder and policy
 together. No hardware here: feed it IMU samples (add_samples) and it works the same on the
-UNO Q and in a laptop replay (see Campus Nav/replay.py)."""
+UNO Q and in a laptop replay (see laptop/replay.py)."""
 import json
 import threading
 from collections import deque

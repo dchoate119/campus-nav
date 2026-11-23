@@ -45,6 +45,21 @@ def test_yaw_survives_foot_swing():
         assert abs(yt.yaw - target) < 15, (target, yt.yaw)
 
 
+def test_gyro_bias_removed():
+    """Board booted while moving: gyro reads (-19, -27, -1) deg/s too much. Standing still for
+    1 s, then walking straight, must not produce a turn once the bias is measured and removed."""
+    off = np.array([-19.0, -27.0, -1.0])
+    still = [[0, 0, 1.0, *off] for _ in range(nc.CALIB_SAMPLES)]
+    walk = [s[:3] + list(np.array(s[3:]) + off) for s in simulate_foot(0, 4, 6)]
+    assert np.allclose(nc.gyro_bias(still), off)
+    assert nc.gyro_bias(walk[:nc.CALIB_SAMPLES * 2]) is None       # moving foot: not trusted
+    yt = nc.YawTracker()
+    yt.bias = nc.gyro_bias(still)
+    for s in still + walk:
+        yt.update(s)
+    assert abs(yt.yaw) < 5, yt.yaw
+
+
 def test_turn_tracker_finds_one_left_turn():
     yaws = [0.0] * 6 + [10, 30, 55, 80, 92, 91] + [90.0] * 8
     states, events = nc.replay_turns(yaws)

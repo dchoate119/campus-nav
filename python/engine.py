@@ -37,12 +37,24 @@ class Engine:
         self.stairs_tracker = nc.StairsTracker()
         self.stairs = ("flat", 0)
         self.last_step_t = None
+        self.calib = None               # list while measuring the gyro bias at walk start, else None
+        self.calib_ok = None            # did the last calibration see a still foot?
         self._load_policy()
 
     # ---------------------------------------------------------------- data flow
 
     def add_samples(self, samples):
         with self.lock:
+            if self.calib is not None:
+                # Hold the first second of a walk back until the bias is known, then run it through.
+                self.calib.extend(samples)
+                if len(self.calib) < nc.CALIB_SAMPLES:
+                    return
+                b = nc.gyro_bias(self.calib[:nc.CALIB_SAMPLES])
+                self.calib_ok = b is not None
+                if b is not None:
+                    self.yaw.bias = b           # else keep the last good bias
+                samples, self.calib = self.calib, None
             for s in samples:
                 self.yaw.update(s)
             self.raw.extend(samples)
@@ -115,6 +127,7 @@ class Engine:
                          "created": time.strftime("%Y-%m-%d %H:%M:%S"), "include": kind != "test",
                          "steps": [], "markers": [], "corrections": []}
             self.mode = "navigate" if navigate else "record"
+            self.calib = []
             if kind != "test":
                 self.csv = open(self.walk_dir / f"{self.walk['id']}.csv", "w")
                 self.csv.write("t,ax,ay,az,gx,gy,gz\n")
@@ -146,6 +159,7 @@ class Engine:
             if self.csv:
                 self.csv.close()
                 self.csv = None
+            self.calib = None
             self.walk, self.mode = None, "idle"
             return wid
 
@@ -244,6 +258,7 @@ class Engine:
             activity = ("standing" if idle else "turning" if st["turning"]
                         else {"up": "stairs up", "down": "stairs down"}.get(self.stairs[0], "walking"))
             return {"mode": self.mode, "steps": self.steps, "heading": round(self.yaw.yaw, 1),
+                    "calibrating": self.calib is not None, "calib_ok": self.calib_ok,
                     "snapped_heading": st["heading"], "turns": st["turns"], "turning": st["turning"],
                     "since_turn": st["since_turn"], "activity": activity, "cue": self.cue, "has_policy": self.policy is not None,
                     "walk": None if self.walk is None else {k: self.walk[k] for k in ("id", "name", "who", "kind")}

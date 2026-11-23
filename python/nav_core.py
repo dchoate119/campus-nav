@@ -37,6 +37,7 @@ class YawTracker:
         self.primed = False
         self.yaw = 0.0
         self.history = []             # yaw after every sample since reset (index = sample number)
+        self.bias = np.zeros(3)       # gyro bias (deg/s), measured while standing still: see gyro_bias()
 
     def reset(self):
         """Zero the heading and the sample counter (keeps the 'up' estimate)."""
@@ -45,7 +46,7 @@ class YawTracker:
 
     def update(self, s):
         a = np.array(s[:3], float)
-        w = np.radians(np.array(s[3:], float))
+        w = np.radians(np.array(s[3:], float) - self.bias)
         an = np.linalg.norm(a)
         if not self.primed and an > 0.5:
             self.u, self.primed = a / an, True
@@ -65,6 +66,19 @@ class YawTracker:
             return 0.0
         i = min(max(int(sample_index), 0), len(self.history) - 1)
         return self.history[i]
+
+
+CALIB_SAMPLES = 100        # 1 s of standing still at the start of every walk
+STILL_STD_DPS = 2.0        # gyro std (deg/s, every axis) below this = the foot really was still
+
+
+def gyro_bias(samples):
+    """Gyro bias (deg/s) from samples taken while standing still, or None if the foot moved.
+    The sketch's boot calibration is wrong if the board moved while booting, so we redo it here."""
+    g = np.array([s[3:] for s in samples], float)
+    if len(g) == 0 or g.std(axis=0).max() > STILL_STD_DPS:
+        return None
+    return g.mean(axis=0)
 
 
 # ------------------------------------------------------------------ turns

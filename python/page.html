@@ -155,7 +155,9 @@ async function poll(){
       $("#corrcount").textContent=`${w.corrections} corrections · ${w.markers} markers`;
       if(nav)cue(s.cue);else lastCue=null;
       $("#cuesub").textContent+=` · ${s.steps} steps · turn #${s.turns} · ${s.activity}`;
-      $("#recbox .dim").textContent=`steps · now: ${s.activity} · turns are detected automatically`}
+      $("#recbox .dim").textContent=`steps · now: ${s.activity} · turns are detected automatically`;
+      if(s.calibrating){$("#bigsteps").textContent="Stand still…";$("#cuesub").textContent="Stand still…"}
+      else if(s.calib_ok===false)$("#recbox .dim").textContent+=" · ⚠ moved during calibration, using last bias"}
     else lastCue=null;
   }catch(e){$("#h_imu").textContent="offline"}
   setTimeout(poll,400)}
